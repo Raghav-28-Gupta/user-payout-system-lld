@@ -8,9 +8,7 @@ Every sale enters as **PENDING** and is eligible for an **advance payout of 10%*
 
 > ✅ The assignment's worked example (3 pending sales × ₹40) reproduces exactly: **₹12 total advance, ₹68 total final payout** — proven by a named automated test and by `bun run demo`.
 
-**Live deployment (Render):** https://user-payout-system-lld.onrender.com — point the Postman collection or any curl command in this README at that base URL instead of `localhost:3000` to test it without running anything locally. Two things worth knowing about this deployment:
-- **Free-tier cold start:** the instance spins down after inactivity; the first request after idling can take 30–60s to respond while it wakes up.
-- **What makes it boot correctly:** the Prisma client (`generated/prisma/`) is gitignored and must be regenerated on every build, and migrations must be applied before the server starts. The `start` script in [package.json](package.json) chains `prisma generate → prisma migrate deploy → bun src/index.ts` for exactly this reason — see [render.yaml](render.yaml) for the full deployment spec (Build Command, Start Command, health check path). If the live URL above isn't responding, the fix is almost always: redeploy so the current `start` script runs, and confirm `DATABASE_URL` is set in the service's environment variables.
+**Live deployment (Render):** https://user-payout-system-lld.onrender.com — point the Postman collection or any curl command in this README at that base URL instead of `localhost:3000` to test it without running anything locally (see Known Limitations for the free-tier cold-start caveat). Deployment spec: [render.yaml](render.yaml).
 
 ---
 
@@ -30,12 +28,12 @@ bun run dev                     # serves http://localhost:3000
 
 ```bash
 bun run demo    # runs the entire worked example over HTTP and prints ₹68
-bun test        # 37 tests: money math, business rules, concurrency, HTTP
+bun test        # full suite — see Project layout & tests below for the breakdown
 ```
 
 > Note: for a Neon database, use the **direct** (non-pooled) connection string so `prisma migrate` works. Tests and the demo **wipe and reseed** the database they point at — use a throwaway DB.
 
-**Or test it interactively with Postman:** import [postman/User-Payout-System.postman_collection.json](postman/User-Payout-System.postman_collection.json) and hit "Run collection." It walks the assignment's exact worked example (folders 1–4, ending in the ₹68 acceptance number), the 24h withdrawal gate and failed-payout recovery (folder 5), and every edge case from the table below (folder 6) — 32 requests with 63 built-in assertions, verified with `newman` to pass cleanly on a fresh run and again immediately after (each run generates its own throwaway username, so it never collides with a previous run's 24h lock). Only variable to set: `baseUrl` (defaults to `http://localhost:3000`).
+**Or test it interactively with Postman:** import [postman/User-Payout-System.postman_collection.json](postman/User-Payout-System.postman_collection.json) and hit "Run collection." It covers the same worked-example walkthrough plus withdrawals and every edge case below, with assertions built into each request.
 
 ---
 
@@ -140,8 +138,6 @@ Errors always use one envelope: `{ "error": { "code", "message", "details?" } }`
 
 ### Curl walkthrough (the worked example)
 
-Prefer clicking through instead of copy-pasting curl? The [Postman collection](postman/User-Payout-System.postman_collection.json) covers this same walkthrough (plus withdrawals and every edge case below) with assertions on each response — see Quick start above.
-
 ```bash
 # 1. Three pending sales, ₹40 each
 for i in 1 2 3; do
@@ -203,7 +199,6 @@ curl -s -X POST localhost:3000/api/users/john_doe/withdraw \
 7. **Advance job as an endpoint, not a cron.** Deterministic to demo and test; in production it would be a scheduled worker calling the same service function.
 8. **`Prisma.Decimal` everywhere; JS `number` never touches money.** Advance = 10% rounded half-up to 2 decimals (the worked example is exact: ₹4/sale).
 9. **TypeScript instead of plain JavaScript.** The assignment permits "JavaScript or Python"; TypeScript is a strict superset of JavaScript with no separate build artifact — `bunx tsc --noEmit` is a type-check only, and Bun runs the `.ts` source directly as JavaScript, so this satisfies the requirement as written. The trade was made deliberately for this domain: a payout system is exactly where an untyped mix-up (a `Decimal` vs. `number`, an `AppError` field renamed in one file but not another, a typo in `LedgerReason`) turns into a silent accounting bug instead of a compile error.
-10. **`generate` + `migrate deploy` chained into the start command, run on every boot.** The Prisma client is a build artifact (correctly gitignored), and Render's free tier has no separate Pre-Deploy Command step — so `bun run start` does `prisma generate && prisma migrate deploy && bun src/index.ts` instead of assuming either already happened. Both operations are idempotent (a no-op when nothing's changed), so the repeated work on every restart is cheap and safe; the alternative — trusting the platform's build cache to have run them — is exactly what silently breaks deploys.
 
 ## Known limitations (deliberate, given scope)
 

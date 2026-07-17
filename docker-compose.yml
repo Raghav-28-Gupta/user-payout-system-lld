@@ -1,0 +1,17 @@
+# Optional: local Postgres for evaluators who prefer not to use a hosted DB.
+# Point DATABASE_URL at it (no sslmode param needed locally):
+#   DATABASE_URL="postgresql://faym:faym@localhost:5432/faym"
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: faym
+      POSTGRES_PASSWORD: faym
+      POSTGRES_DB: faym
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

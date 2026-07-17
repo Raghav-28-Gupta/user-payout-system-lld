@@ -1,0 +1,19 @@
+# Render Blueprint — the authoritative deployment spec for this service.
+# Import via Render Dashboard > New > Blueprint, or use it as a reference to
+# check/fix the Build Command, Start Command, and health check path on an
+# already-created service (Settings tab).
+services:
+  - type: web
+    name: user-payout-system-lld
+    runtime: node # Render's native runtime; it bundles Bun (see README).
+    plan: free # change to your actual plan if this isn't free tier
+    buildCommand: bun install
+    # `start` (package.json) chains: prisma generate -> prisma migrate deploy -> boot.
+    # This runs on every deploy AND every restart, which is intentional: both
+    # `generate` and `migrate deploy` are idempotent, and free-tier Render has
+    # no separate Pre-Deploy Command step, so this is what applies migrations.
+    startCommand: bun run start
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false # set manually in the dashboard — never commit a real connection string

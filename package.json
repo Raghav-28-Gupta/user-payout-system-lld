@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts",
+    "start": "bunx prisma generate && bunx prisma migrate deploy && bun src/index.ts",
+    "postinstall": "prisma generate",
     "seed": "bun prisma/seed.ts",
     "demo": "bun scripts/demo.ts",
     "db:migrate": "bunx prisma migrate dev",

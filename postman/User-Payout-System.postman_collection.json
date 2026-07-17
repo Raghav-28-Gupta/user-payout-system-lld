@@ -1,13 +1,13 @@
 {
   "info": {
     "name": "User Payout Management System",
-    "description": "Affiliate-sales payout system: 10% advance payouts, admin reconciliation, and 24h-gated withdrawals with failed-payout recovery. This collection walks through the assignment's own worked example end to end — folders 1 through 4 reproduce the exact ₹12 advance / ₹68 final-payout numbers from the spec, folder 5 exercises the 24h withdrawal gate and Question 2's failed-payout recovery, and folder 6 covers the edge cases documented in the README.\n\n**How to use:** start the server (`bun run dev`), then either click \"Run collection\" for the whole story with automatic assertions, or open folders top to bottom and inspect each response yourself. Every request generates a fresh username on each full run (see the pre-request script on the very first request), so the collection can be re-run any number of times — including inside the same 24h window — without stepping on a previous run's state.\n\nOnly variable you might need to change: `baseUrl` (defaults to `http://localhost:3000`).",
+    "description": "Affiliate-sales payout system: 10% advance payouts, admin reconciliation, and 24h-gated withdrawals with failed-payout recovery. This collection walks through the assignment's own worked example end to end — folders 1 through 4 reproduce the exact ₹12 advance / ₹68 final-payout numbers from the spec, folder 5 exercises the 24h withdrawal gate and Question 2's failed-payout recovery, and folder 6 covers the edge cases documented in the README.\n\n**How to use:** just click \"Run collection\" — `baseUrl` already points at the live Render deployment, so nothing needs to be installed or started locally. (Note: the free-tier instance spins down when idle, so the very first request after a period of inactivity can take 30-60s to respond.) Prefer to test against your own local server instead? Change the `baseUrl` variable to `http://localhost:3000` and run `bun run dev`. Either way, every request generates a fresh username on each full run (see the pre-request script on the very first request), so the collection can be re-run any number of times — including inside the same 24h window — without stepping on a previous run's state.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:3000",
+      "value": "https://user-payout-system-lld.onrender.com",
       "type": "string"
     },
     {

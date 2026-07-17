@@ -6,9 +6,11 @@ Every sale enters as **PENDING** and is eligible for an **advance payout of 10%*
 
 **Stack:** Bun · TypeScript · Express 5 · Prisma 7 · PostgreSQL
 
-> **Language note:** the assignment asks for "JavaScript or Python." TypeScript is a strict superset of JavaScript — it has no separate runtime or build step here; Bun executes it directly using JavaScript semantics throughout. TypeScript was chosen over plain JS specifically for this system because compile-time types catch mistakes in the money math and Prisma models that are otherwise easy to miss (e.g. an `earning: number` slipping in next to `Decimal`, or a typo in a payout/ledger enum) — see design decision 9 below.
-
 > ✅ The assignment's worked example (3 pending sales × ₹40) reproduces exactly: **₹12 total advance, ₹68 total final payout** — proven by a named automated test and by `bun run demo`.
+
+**Live deployment (Render):** https://user-payout-system-lld.onrender.com — point the Postman collection or any curl command in this README at that base URL instead of `localhost:3000` to test it without running anything locally. Two things worth knowing about this deployment:
+- **Free-tier cold start:** the instance spins down after inactivity; the first request after idling can take 30–60s to respond while it wakes up.
+- **What makes it boot correctly:** the Prisma client (`generated/prisma/`) is gitignored and must be regenerated on every build, and migrations must be applied before the server starts. The `start` script in [package.json](package.json) chains `prisma generate → prisma migrate deploy → bun src/index.ts` for exactly this reason — see [render.yaml](render.yaml) for the full deployment spec (Build Command, Start Command, health check path). If the live URL above isn't responding, the fix is almost always: redeploy so the current `start` script runs, and confirm `DATABASE_URL` is set in the service's environment variables.
 
 ---
 
@@ -201,10 +203,12 @@ curl -s -X POST localhost:3000/api/users/john_doe/withdraw \
 7. **Advance job as an endpoint, not a cron.** Deterministic to demo and test; in production it would be a scheduled worker calling the same service function.
 8. **`Prisma.Decimal` everywhere; JS `number` never touches money.** Advance = 10% rounded half-up to 2 decimals (the worked example is exact: ₹4/sale).
 9. **TypeScript instead of plain JavaScript.** The assignment permits "JavaScript or Python"; TypeScript is a strict superset of JavaScript with no separate build artifact — `bunx tsc --noEmit` is a type-check only, and Bun runs the `.ts` source directly as JavaScript, so this satisfies the requirement as written. The trade was made deliberately for this domain: a payout system is exactly where an untyped mix-up (a `Decimal` vs. `number`, an `AppError` field renamed in one file but not another, a typo in `LedgerReason`) turns into a silent accounting bug instead of a compile error.
+10. **`generate` + `migrate deploy` chained into the start command, run on every boot.** The Prisma client is a build artifact (correctly gitignored), and Render's free tier has no separate Pre-Deploy Command step — so `bun run start` does `prisma generate && prisma migrate deploy && bun src/index.ts` instead of assuming either already happened. Both operations are idempotent (a no-op when nothing's changed), so the repeated work on every restart is cheap and safe; the alternative — trusting the platform's build cache to have run them — is exactly what silently breaks deploys.
 
 ## Known limitations (deliberate, given scope)
 
 - No authentication/authorization — `/api/admin/*` and the job endpoint would need it in production.
+- Render's free tier spins the instance down after inactivity; the first request after idling takes 30–60s to respond.
 - No pagination on list endpoints.
 - The processor webhook is simulated by an endpoint; a real integration would verify signatures and handle out-of-order delivery (the 409 idempotency guard already covers replays).
 - Per-sale advances are computed row-by-row; a set-based SQL job would scale better for millions of pending sales.
@@ -218,6 +222,7 @@ src/services/          all business logic              tests/withdrawals.test.ts
 src/routes/ + app.ts   HTTP layer                      tests/api.test.ts          6 tests (₹68 over HTTP)
 scripts/demo.ts        end-to-end proof (₹68)          tests/concurrency.test.ts  4 tests
 postman/*.json         importable Postman collection   32 requests, 63 assertions
+render.yaml            Render deployment spec
 ```
 
 Tests run against the real database in `DATABASE_URL` (wiping it each test) — business rules, race conditions and HTTP behavior are exercised for real, nothing is mocked.

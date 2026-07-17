@@ -1,0 +1,1459 @@
+{
+  "info": {
+    "name": "User Payout Management System",
+    "description": "Affiliate-sales payout system: 10% advance payouts, admin reconciliation, and 24h-gated withdrawals with failed-payout recovery. This collection walks through the assignment's own worked example end to end — folders 1 through 4 reproduce the exact ₹12 advance / ₹68 final-payout numbers from the spec, folder 5 exercises the 24h withdrawal gate and Question 2's failed-payout recovery, and folder 6 covers the edge cases documented in the README.\n\n**How to use:** start the server (`bun run dev`), then either click \"Run collection\" for the whole story with automatic assertions, or open folders top to bottom and inspect each response yourself. Every request generates a fresh username on each full run (see the pre-request script on the very first request), so the collection can be re-run any number of times — including inside the same 24h window — without stepping on a previous run's state.\n\nOnly variable you might need to change: `baseUrl` (defaults to `http://localhost:3000`).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "runUser",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "edgeUser",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "saleId1",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "saleId2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "saleId3",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "withdrawPayoutId1",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "withdrawPayoutId2",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Health Check",
+      "description": "Sanity check that the server is up before running the rest of the collection.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"ok is true\", function () { pm.expect(pm.response.json().ok).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Seed Sales — Worked Example (3 x Rs 40)",
+      "description": "Recreates the assignment's reference data: three pending sales of Rs 40 each for one user/brand. A fresh username is generated here so the whole collection can be re-run safely at any time, including within the same 24h window as a previous run.",
+      "item": [
+        {
+          "name": "Create Sale 1 (Rs 40)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sales"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{runUser}}\",\n  \"brand\": \"brand_1\",\n  \"earning\": 40\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Fresh user per full run — keeps the 24h withdrawal gate and idempotency",
+                  "// guards from colliding with data left over from a previous run.",
+                  "pm.collectionVariables.set(\"runUser\", \"postman_\" + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"status is PENDING\", function () { pm.expect(body.status).to.eql(\"PENDING\"); });",
+                  "pm.test(\"earning is 40\", function () { pm.expect(body.earning).to.eql(\"40\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Sale 2 (Rs 40)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sales"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{runUser}}\",\n  \"brand\": \"brand_1\",\n  \"earning\": 40\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Sale 3 (Rs 40)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sales"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{runUser}}\",\n  \"brand\": \"brand_1\",\n  \"earning\": 40\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Advance Payout Job (Business Rule 1)",
+      "description": "10% of pending earnings, paid once per sale. Running the job twice proves the idempotency guard.",
+      "item": [
+        {
+          "name": "Run Advance Payout Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/advance-payout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "advance-payout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{runUser}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"3 sales processed\", function () { pm.expect(body.salesProcessed).to.eql(3); });",
+                  "pm.test(\"total advance is Rs 12.00\", function () { pm.expect(body.totalAdvancePaid).to.eql(\"12.00\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run Advance Payout Job Again (Idempotency Check)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/advance-payout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "advance-payout"
+              ]
+            },
+            "description": "Re-running the job must be a no-op — every sale already got its advance.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{runUser}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"0 sales processed (idempotent)\", function () { pm.expect(body.salesProcessed).to.eql(0); });",
+                  "pm.test(\"no additional advance paid\", function () { pm.expect(body.totalAdvancePaid).to.eql(\"0.00\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Balance After Advance (expect Rs 12.00)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{runUser}}/balance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{runUser}}",
+                "balance"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"balance is 12.00\", function () { pm.expect(pm.response.json().withdrawableBalance).to.eql(\"12.00\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Reconciliation (Business Rule 2) - rejected, approved, approved -> Rs 68",
+      "description": "Settles the three pending sales exactly as in the assignment's worked example: one rejected (clawback -Rs 4), two approved (+Rs 36 each) -> total final payout Rs 68.",
+      "item": [
+        {
+          "name": "List Pending Sales (capture sale ids)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{runUser}}/sales?status=pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{runUser}}",
+                "sales"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "pending"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const sales = pm.response.json();",
+                  "pm.test(\"3 pending sales\", function () { pm.expect(sales.length).to.eql(3); });",
+                  "pm.collectionVariables.set(\"saleId1\", sales[0].id);",
+                  "pm.collectionVariables.set(\"saleId2\", sales[1].id);",
+                  "pm.collectionVariables.set(\"saleId3\", sales[2].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reconcile Sale 1 -> Rejected (adjustment -Rs 4.00)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sales/{{saleId1}}/reconcile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sales",
+                "{{saleId1}}",
+                "reconcile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"rejected\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"adjustment is -4.00\", function () { pm.expect(pm.response.json().adjustment).to.eql(\"-4.00\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reconcile Sale 2 -> Approved (adjustment Rs 36.00)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sales/{{saleId2}}/reconcile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sales",
+                "{{saleId2}}",
+                "reconcile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"adjustment is 36.00\", function () { pm.expect(pm.response.json().adjustment).to.eql(\"36.00\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reconcile Sale 3 -> Approved (adjustment Rs 36.00)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sales/{{saleId3}}/reconcile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sales",
+                "{{saleId3}}",
+                "reconcile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"adjustment is 36.00\", function () { pm.expect(pm.response.json().adjustment).to.eql(\"36.00\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Balance After Reconciliation (expect Rs 80.00 = Rs 12 + Rs 68)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{runUser}}/balance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{runUser}}",
+                "balance"
+              ]
+            },
+            "description": "This is the assignment's own acceptance number: -4 + 36 + 36 = Rs 68 final payout, on top of the Rs 12 advance already paid = Rs 80 total balance."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"balance is 80.00 (Rs12 advance + Rs68 final payout)\", function () { pm.expect(pm.response.json().withdrawableBalance).to.eql(\"80.00\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Ledger - Full Audit Trail",
+      "description": "Every balance-changing event, in order, with a running balance.",
+      "item": [
+        {
+          "name": "Get Ledger",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{runUser}}/ledger",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{runUser}}",
+                "ledger"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "const ledger = pm.response.json();",
+                  "pm.test(\"6 ledger entries (3 advances + 3 adjustments)\", function () { pm.expect(ledger.length).to.eql(6); });",
+                  "pm.test(\"running balance ends at 80\", function () { pm.expect(ledger[5].balanceAfter).to.eql(\"80\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Withdrawals - 24h Gate & Failed-Payout Recovery (Question 2)",
+      "description": "Reserves Rs 50 on withdraw, simulates a processor FAILURE (money credited back, retry allowed immediately), then a COMPLETED withdrawal which starts the 24h lock.",
+      "item": [
+        {
+          "name": "Withdraw Rs 50",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{runUser}}/withdraw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{runUser}}",
+                "withdraw"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"payout is PENDING\", function () { pm.expect(body.status).to.eql(\"PENDING\"); });",
+                  "pm.collectionVariables.set(\"withdrawPayoutId1\", body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Balance After Reserve (expect Rs 30.00)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{runUser}}/balance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{runUser}}",
+                "balance"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"balance is 30.00\", function () { pm.expect(pm.response.json().withdrawableBalance).to.eql(\"30.00\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve Withdrawal as FAILED (simulates processor failure)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payouts/{{withdrawPayoutId1}}/resolve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payouts",
+                "{{withdrawPayoutId1}}",
+                "resolve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"failed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"payout is FAILED\", function () { pm.expect(pm.response.json().status).to.eql(\"FAILED\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Balance After Credit-Back (expect Rs 80.00 again)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{runUser}}/balance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{runUser}}",
+                "balance"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"balance credited back to 80.00\", function () { pm.expect(pm.response.json().withdrawableBalance).to.eql(\"80.00\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Withdraw Rs 50 Again - Immediate Retry Allowed (Question 2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{runUser}}/withdraw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{runUser}}",
+                "withdraw"
+              ]
+            },
+            "description": "Proves Question 2: a failed withdrawal frees the daily slot, so retrying immediately succeeds.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set(\"withdrawPayoutId2\", body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve Withdrawal as COMPLETED",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payouts/{{withdrawPayoutId2}}/resolve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payouts",
+                "{{withdrawPayoutId2}}",
+                "resolve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"payout is COMPLETED\", function () { pm.expect(pm.response.json().status).to.eql(\"COMPLETED\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attempt Another Withdrawal Within 24h -> Expect 429",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{runUser}}/withdraw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{runUser}}",
+                "withdraw"
+              ]
+            },
+            "description": "A COMPLETED withdrawal starts the 24h lock; the very next attempt must be rejected.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 429\", function () { pm.response.to.have.status(429); });",
+                  "pm.test(\"error code is WITHDRAWAL_LIMIT\", function () { pm.expect(pm.response.json().error.code).to.eql(\"WITHDRAWAL_LIMIT\"); });",
+                  "pm.test(\"Retry-After header is present and positive\", function () {",
+                  "  const retryAfter = Number(pm.response.headers.get(\"Retry-After\"));",
+                  "  pm.expect(retryAfter).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Edge Cases & Error Handling",
+      "description": "Every failure mode documented in the README's edge-case matrix. Some requests reuse ids captured in earlier folders, so run this folder last (or run the whole collection top to bottom).",
+      "item": [
+        {
+          "name": "Invalid Sale Body -> 400 VALIDATION_ERROR",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sales"
+              ]
+            },
+            "description": "Missing required fields (brand, earning).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"x\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"error code is VALIDATION_ERROR\", function () { pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown User Balance -> 404 USER_NOT_FOUND",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/no_such_user_{{$timestamp}}/balance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "no_such_user_{{$timestamp}}",
+                "balance"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"error code is USER_NOT_FOUND\", function () { pm.expect(pm.response.json().error.code).to.eql(\"USER_NOT_FOUND\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid Reconcile Status -> 400 VALIDATION_ERROR",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sales/00000000-0000-0000-0000-000000000000/reconcile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sales",
+                "00000000-0000-0000-0000-000000000000",
+                "reconcile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"maybe\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"error code is VALIDATION_ERROR\", function () { pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reconcile Unknown Sale -> 404 SALE_NOT_FOUND",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sales/00000000-0000-0000-0000-000000000000/reconcile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sales",
+                "00000000-0000-0000-0000-000000000000",
+                "reconcile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"error code is SALE_NOT_FOUND\", function () { pm.expect(pm.response.json().error.code).to.eql(\"SALE_NOT_FOUND\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Double Reconcile -> 409 ALREADY_RECONCILED",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sales/{{saleId1}}/reconcile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sales",
+                "{{saleId1}}",
+                "reconcile"
+              ]
+            },
+            "description": "Reuses sale 1 from folder 3, which was already reconciled as rejected.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"error code is ALREADY_RECONCILED\", function () { pm.expect(pm.response.json().error.code).to.eql(\"ALREADY_RECONCILED\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Withdraw More Than Balance -> 400 INSUFFICIENT_BALANCE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{runUser}}/withdraw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{runUser}}",
+                "withdraw"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 999999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"error code is INSUFFICIENT_BALANCE\", function () { pm.expect(pm.response.json().error.code).to.eql(\"INSUFFICIENT_BALANCE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve Unknown Payout -> 404 PAYOUT_NOT_FOUND",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payouts/00000000-0000-0000-0000-000000000000/resolve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payouts",
+                "00000000-0000-0000-0000-000000000000",
+                "resolve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"error code is PAYOUT_NOT_FOUND\", function () { pm.expect(pm.response.json().error.code).to.eql(\"PAYOUT_NOT_FOUND\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Double-Resolve Same Payout -> 409 ALREADY_RESOLVED",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payouts/{{withdrawPayoutId2}}/resolve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payouts",
+                "{{withdrawPayoutId2}}",
+                "resolve"
+              ]
+            },
+            "description": "Reuses the withdrawal from folder 5, which was already resolved as completed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"failed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"error code is ALREADY_RESOLVED\", function () { pm.expect(pm.response.json().error.code).to.eql(\"ALREADY_RESOLVED\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edge: Create Sale for Double-Withdrawal Test (Rs 100)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sales"
+              ]
+            },
+            "description": "Self-contained sub-scenario with its own user, so it doesn't disturb the main flow's balance/24h state.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{edgeUser}}\",\n  \"brand\": \"brand_1\",\n  \"earning\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"edgeUser\", \"postman_edge_\" + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edge: Run Advance Payout for Edge User (balance -> Rs 10.00)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/advance-payout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "advance-payout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{edgeUser}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edge: First Withdrawal (Rs 5) - Should Succeed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{edgeUser}}/withdraw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{edgeUser}}",
+                "withdraw"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edge: Second Withdrawal While First Still Pending -> 409 WITHDRAWAL_IN_PROGRESS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{edgeUser}}/withdraw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{edgeUser}}",
+                "withdraw"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"error code is WITHDRAWAL_IN_PROGRESS\", function () { pm.expect(pm.response.json().error.code).to.eql(\"WITHDRAWAL_IN_PROGRESS\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

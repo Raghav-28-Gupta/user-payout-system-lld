@@ -6,6 +6,8 @@ Every sale enters as **PENDING** and is eligible for an **advance payout of 10%*
 
 **Stack:** Bun · TypeScript · Express 5 · Prisma 7 · PostgreSQL
 
+> **Language note:** the assignment asks for "JavaScript or Python." TypeScript is a strict superset of JavaScript — it has no separate runtime or build step here; Bun executes it directly using JavaScript semantics throughout. TypeScript was chosen over plain JS specifically for this system because compile-time types catch mistakes in the money math and Prisma models that are otherwise easy to miss (e.g. an `earning: number` slipping in next to `Decimal`, or a typo in a payout/ledger enum) — see design decision 9 below.
+
 > ✅ The assignment's worked example (3 pending sales × ₹40) reproduces exactly: **₹12 total advance, ₹68 total final payout** — proven by a named automated test and by `bun run demo`.
 
 ---
@@ -30,6 +32,8 @@ bun test        # 37 tests: money math, business rules, concurrency, HTTP
 ```
 
 > Note: for a Neon database, use the **direct** (non-pooled) connection string so `prisma migrate` works. Tests and the demo **wipe and reseed** the database they point at — use a throwaway DB.
+
+**Or test it interactively with Postman:** import [postman/User-Payout-System.postman_collection.json](postman/User-Payout-System.postman_collection.json) and hit "Run collection." It walks the assignment's exact worked example (folders 1–4, ending in the ₹68 acceptance number), the 24h withdrawal gate and failed-payout recovery (folder 5), and every edge case from the table below (folder 6) — 32 requests with 63 built-in assertions, verified with `newman` to pass cleanly on a fresh run and again immediately after (each run generates its own throwaway username, so it never collides with a previous run's 24h lock). Only variable to set: `baseUrl` (defaults to `http://localhost:3000`).
 
 ---
 
@@ -134,6 +138,8 @@ Errors always use one envelope: `{ "error": { "code", "message", "details?" } }`
 
 ### Curl walkthrough (the worked example)
 
+Prefer clicking through instead of copy-pasting curl? The [Postman collection](postman/User-Payout-System.postman_collection.json) covers this same walkthrough (plus withdrawals and every edge case below) with assertions on each response — see Quick start above.
+
 ```bash
 # 1. Three pending sales, ₹40 each
 for i in 1 2 3; do
@@ -194,6 +200,7 @@ curl -s -X POST localhost:3000/api/users/john_doe/withdraw \
 6. **Negative balances are allowed** (rejection after the advance was withdrawn). The debt is visible in the ledger and nets off against future earnings; withdrawals are blocked while ≤ 0. Alternative (blocking rejection or external recovery) felt heavier than the assignment warrants.
 7. **Advance job as an endpoint, not a cron.** Deterministic to demo and test; in production it would be a scheduled worker calling the same service function.
 8. **`Prisma.Decimal` everywhere; JS `number` never touches money.** Advance = 10% rounded half-up to 2 decimals (the worked example is exact: ₹4/sale).
+9. **TypeScript instead of plain JavaScript.** The assignment permits "JavaScript or Python"; TypeScript is a strict superset of JavaScript with no separate build artifact — `bunx tsc --noEmit` is a type-check only, and Bun runs the `.ts` source directly as JavaScript, so this satisfies the requirement as written. The trade was made deliberately for this domain: a payout system is exactly where an untyped mix-up (a `Decimal` vs. `number`, an `AppError` field renamed in one file but not another, a typo in `LedgerReason`) turns into a silent accounting bug instead of a compile error.
 
 ## Known limitations (deliberate, given scope)
 
@@ -210,6 +217,7 @@ prisma/seed.ts         exact reference data            tests/services.test.ts   
 src/services/          all business logic              tests/withdrawals.test.ts 14 tests
 src/routes/ + app.ts   HTTP layer                      tests/api.test.ts          6 tests (₹68 over HTTP)
 scripts/demo.ts        end-to-end proof (₹68)          tests/concurrency.test.ts  4 tests
+postman/*.json         importable Postman collection   32 requests, 63 assertions
 ```
 
 Tests run against the real database in `DATABASE_URL` (wiping it each test) — business rules, race conditions and HTTP behavior are exercised for real, nothing is mocked.

@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { AppError } from "../errors";
 import type { Decimal } from "../money";
+import { requireUser } from "./userService";
 import type { Sale, SaleStatus } from "../../generated/prisma/client";
 
 /**
@@ -34,8 +35,7 @@ export async function createSale(args: {
 }
 
 export async function listSales(username: string, status?: SaleStatus): Promise<Sale[]> {
-  const user = await prisma.user.findUnique({ where: { username } });
-  if (!user) throw new AppError(404, "USER_NOT_FOUND", `no user named '${username}'`);
+  const user = await requireUser(username);
 
   return prisma.sale.findMany({
     where: { userId: user.id, ...(status && { status }) },

@@ -1,7 +1,7 @@
 import { prisma } from "../db";
-import { AppError } from "../errors";
 import { Decimal, advanceOn } from "../money";
 import { applyLedgerEntry } from "./ledgerService";
+import { requireUser } from "./userService";
 
 /**
  * Business Rule 1: every PENDING sale gets a one-time advance of 10% of its
@@ -14,12 +14,7 @@ import { applyLedgerEntry } from "./ledgerService";
 export async function runAdvancePayoutJob(
   username?: string,
 ): Promise<{ salesProcessed: number; totalAdvancePaid: string }> {
-  let userId: string | undefined;
-  if (username !== undefined) {
-    const user = await prisma.user.findUnique({ where: { username } });
-    if (!user) throw new AppError(404, "USER_NOT_FOUND", `no user named '${username}'`);
-    userId = user.id;
-  }
+  const userId = username !== undefined ? (await requireUser(username)).id : undefined;
 
   const candidates = await prisma.sale.findMany({
     where: { status: "PENDING", advancePaidAt: null, ...(userId && { userId }) },

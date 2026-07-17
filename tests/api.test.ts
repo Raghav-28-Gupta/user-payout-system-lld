@@ -22,7 +22,8 @@ async function api(method: string, path: string, body?: unknown) {
     headers: { "Content-Type": "application/json" },
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
-  return { status: response.status, headers: response.headers, body: await response.json() };
+  const responseBody = (await response.json()) as any;
+  return { status: response.status, headers: response.headers, body: responseBody };
 }
 
 describe("worked example over HTTP", () => {

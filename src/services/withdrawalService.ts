@@ -1,4 +1,4 @@
-import { prisma } from "../db";
+import { prisma, TX_OPTIONS } from "../db";
 import { AppError } from "../errors";
 import type { Decimal } from "../money";
 import { applyLedgerEntry } from "./ledgerService";
@@ -76,7 +76,7 @@ export async function initiateWithdrawal(username: string, amount: Decimal): Pro
     });
 
     return payout;
-  });
+  }, TX_OPTIONS);
 }
 
 /**
@@ -130,5 +130,5 @@ export async function resolveWithdrawal(
     }
 
     return updated;
-  });
+  }, TX_OPTIONS);
 }

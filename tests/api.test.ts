@@ -138,4 +138,22 @@ describe("validation and error shapes", () => {
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
   });
+
+  test("double reconcile over HTTP → 409 ALREADY_RECONCILED", async () => {
+    const sale = await api("POST", "/api/sales", {
+      userId: "double_reconcile_user",
+      brand: "brand_3",
+      earning: 25,
+    });
+    const first = await api("POST", `/api/admin/sales/${sale.body.id}/reconcile`, {
+      status: "approved",
+    });
+    expect(first.status).toBe(200);
+
+    const second = await api("POST", `/api/admin/sales/${sale.body.id}/reconcile`, {
+      status: "rejected",
+    });
+    expect(second.status).toBe(409);
+    expect(second.body.error.code).toBe("ALREADY_RECONCILED");
+  });
 });

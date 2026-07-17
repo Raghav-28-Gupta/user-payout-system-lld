@@ -1,4 +1,4 @@
-import { prisma } from "../db";
+import { prisma, TX_OPTIONS } from "../db";
 import { AppError } from "../errors";
 import { applyLedgerEntry } from "./ledgerService";
 import type { Sale } from "../../generated/prisma/client";
@@ -61,5 +61,5 @@ export async function reconcileSale(
     }
 
     return { sale: updated, adjustment: adjustment.toFixed(2) };
-  });
+  }, TX_OPTIONS);
 }

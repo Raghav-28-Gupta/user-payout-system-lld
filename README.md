@@ -38,42 +38,23 @@ bun test        # 37 tests: money math, business rules, concurrency, HTTP
 ### Entity–relationship model
 
 ```mermaid
-erDiagram
-    USER ||--o{ SALE : "earns from"
-    BRAND ||--o{ SALE : "originates"
-    USER ||--o{ PAYOUT : "receives"
-    SALE |o--o{ PAYOUT : "settled by"
-    USER ||--o{ LEDGER_ENTRY : "audited by"
-    PAYOUT |o--o{ LEDGER_ENTRY : "explains"
-    SALE |o--o{ LEDGER_ENTRY : "explains"
-
-    USER {
-        uuid id PK
-        string username UK
-        decimal withdrawableBalance "denormalized, O(1) reads"
-        datetime lastSuccessfulWithdrawalAt "nullable; drives the 24h gate"
-    }
-    SALE {
-        uuid id PK
-        decimal earning
-        enum status "PENDING | APPROVED | REJECTED"
-        decimal advancePaid "0 until the advance job pays"
-        datetime advancePaidAt "nullable; the idempotency guard"
-        datetime reconciledAt "nullable"
-    }
-    PAYOUT {
-        uuid id PK
-        enum type "ADVANCE | FINAL_ADJUSTMENT | WITHDRAWAL"
-        decimal amount "negative allowed for clawbacks"
-        enum status "PENDING | COMPLETED | FAILED | CANCELLED | REJECTED"
-    }
-    LEDGER_ENTRY {
-        uuid id PK
-        decimal amount "signed delta"
-        enum reason "ADVANCE_PAYOUT | FINAL_ADJUSTMENT | WITHDRAWAL_RESERVED | WITHDRAWAL_REVERSED"
-        decimal balanceAfter "chained running balance"
-    }
+flowchart LR
+    User(["User"]) -->|earns from| Sale["Sale"]
+    Brand(["Brand"]) -->|originates| Sale
+    User -->|receives| Payout["Payout"]
+    Sale -.->|settled by| Payout
+    User -->|audited by| Ledger["LedgerEntry"]
+    Payout -.->|explains| Ledger
+    Sale -.->|explains| Ledger
 ```
+
+| Entity | Key fields | Notes |
+| --- | --- | --- |
+| **User** | `id` PK, `username` UK, `withdrawableBalance`, `lastSuccessfulWithdrawalAt` | Balance is denormalized for O(1) reads; the timestamp drives the 24h gate |
+| **Brand** | `id` PK, `name` UK | |
+| **Sale** | `id` PK, `earning`, `status` (PENDING\|APPROVED\|REJECTED), `advancePaid`, `advancePaidAt`, `reconciledAt` | `advancePaidAt` is the idempotency guard for the advance job |
+| **Payout** | `id` PK, `type` (ADVANCE\|FINAL_ADJUSTMENT\|WITHDRAWAL), `amount` (negative allowed), `status` (PENDING\|COMPLETED\|FAILED\|CANCELLED\|REJECTED) | |
+| **LedgerEntry** | `id` PK, `amount` (signed delta), `reason`, `balanceAfter` | Append-only; `balanceAfter` lets the balance be verified by replay |
 
 Full schema with indexes: [prisma/schema.prisma](prisma/schema.prisma).
 

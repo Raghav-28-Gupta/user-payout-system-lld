@@ -8,7 +8,7 @@ Every sale enters as **PENDING** and is eligible for an **advance payout of 10%*
 
 > ✅ The assignment's worked example (3 pending sales × ₹40) reproduces exactly: **₹12 total advance, ₹68 total final payout** — proven by a named automated test and by `bun run demo`.
 
-**Live deployment (Render):** https://user-payout-system-lld.onrender.com — point the Postman collection or any curl command in this README at that base URL instead of `localhost:3000` to test it without running anything locally (see Known Limitations for the free-tier cold-start caveat). Deployment spec: [render.yaml](render.yaml).
+**Live deployment (Render):** https://user-payout-system-lld.onrender.com — point the Postman collection or any curl command in this README at that base URL instead of `localhost:3000` to test it without running anything locally (see Known Limitations for the free-tier cold-start caveat). Deployment spec: [render.yaml](render.yaml). Interactive API docs: [/docs](https://user-payout-system-lld.onrender.com/docs) (Swagger UI, spec source: [openapi.yaml](openapi.yaml)).
 
 ---
 
@@ -123,6 +123,8 @@ ADVANCE_PAYOUT       +4   → 12       FINAL_ADJUSTMENT   +36   → 80
 
 ## API reference
 
+Full request/response schemas, enums, and error shapes: [openapi.yaml](openapi.yaml), browsable at [/docs](https://user-payout-system-lld.onrender.com/docs). Quick reference:
+
 | Method | Path | Body | Purpose |
 | --- | --- | --- | --- |
 | POST | `/api/sales` | `{ userId, brand, earning }` | Record a pending sale (mirrors the reference schema) |
@@ -217,6 +219,7 @@ src/services/          all business logic              tests/withdrawals.test.ts
 src/routes/ + app.ts   HTTP layer                      tests/api.test.ts          6 tests (₹68 over HTTP)
 scripts/demo.ts        end-to-end proof (₹68)          tests/concurrency.test.ts  4 tests
 postman/*.json         importable Postman collection   32 requests, 63 assertions
+openapi.yaml           API spec, served at /docs
 render.yaml            Render deployment spec
 ```
 

@@ -1,0 +1,543 @@
+openapi: 3.1.0
+info:
+  title: User Payout Management System
+  version: "1.0.0"
+  description: >
+    Affiliate-sales payout system: 10% advance payouts, admin reconciliation,
+    and 24h-gated withdrawals with failed-payout recovery. See the repo
+    README for the full low-level design, business rules, and edge-case
+    matrix — this document covers request/response shapes only.
+servers:
+  - url: https://user-payout-system-lld.onrender.com
+    description: Live deployment (Render free tier — first request after idling can take 30-60s)
+  - url: http://localhost:3000
+    description: Local development (bun run dev)
+
+tags:
+  - name: Sales
+  - name: Jobs
+  - name: Admin
+  - name: Users
+  - name: Payouts
+  - name: Health
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+
+  /api/sales:
+    post:
+      tags: [Sales]
+      summary: Record a pending sale
+      description: >
+        Upserts the user and brand by name (mirroring the assignment's
+        reference schema, which identifies both by string id) and creates a
+        new PENDING sale.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSaleRequest"
+            example:
+              userId: john_doe
+              brand: brand_1
+              earning: 40
+      responses:
+        "201":
+          description: Sale created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sale"
+        "400":
+          description: Validation error (missing/invalid fields, non-positive earning)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/users/{username}/sales:
+    get:
+      tags: [Users]
+      summary: List a user's sales
+      parameters:
+        - $ref: "#/components/parameters/Username"
+        - name: status
+          in: query
+          required: false
+          description: Filter by sale status
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        "200":
+          description: The user's sales, most recently created last
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Sale"
+        "404":
+          $ref: "#/components/responses/UserNotFound"
+
+  /api/jobs/advance-payout:
+    post:
+      tags: [Jobs]
+      summary: Run the advance payout job
+      description: >
+        Pays a one-time 10% advance on every PENDING sale that hasn't
+        received one yet (Business Rule 1). Idempotent: sales that already
+        have an advance are skipped. Exposed as an endpoint rather than a
+        real cron scheduler — see README trade-offs.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: string
+                  description: Scope the job to one user (by username). Omit to run for all users.
+              example:
+                userId: john_doe
+      responses:
+        "200":
+          description: Job result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdvancePayoutResult"
+        "404":
+          description: userId was given but no such user exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/admin/sales/{saleId}/reconcile:
+    post:
+      tags: [Admin]
+      summary: Reconcile a pending sale
+      description: >
+        Settles a PENDING sale (Business Rule 2). `approved` pays the
+        remainder (`earning - advancePaid`); `rejected` claws the advance
+        back (`-advancePaid`). Only PENDING sales can be reconciled.
+      parameters:
+        - $ref: "#/components/parameters/SaleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [approved, rejected]
+              example:
+                status: approved
+      responses:
+        "200":
+          description: Reconciliation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconcileResult"
+        "400":
+          description: Validation error (status must be "approved" or "rejected")
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No sale with that id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Sale is not PENDING — already reconciled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: ALREADY_RECONCILED
+                  message: "sale '...' is already APPROVED; only PENDING sales can be reconciled"
+
+  /api/users/{username}/balance:
+    get:
+      tags: [Users]
+      summary: Get a user's current withdrawable balance
+      parameters:
+        - $ref: "#/components/parameters/Username"
+      responses:
+        "200":
+          description: Balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Balance"
+        "404":
+          $ref: "#/components/responses/UserNotFound"
+
+  /api/users/{username}/withdraw:
+    post:
+      tags: [Users]
+      summary: Initiate a withdrawal
+      description: >
+        Reserves `amount` from the balance immediately as a PENDING payout
+        (Business Rule 3). Blocked with 429 if a successful withdrawal
+        completed within the last 24 hours, with 409 if a withdrawal is
+        already PENDING, and with 400 if the balance is insufficient.
+      parameters:
+        - $ref: "#/components/parameters/Username"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  oneOf:
+                    - type: number
+                    - type: string
+              example:
+                amount: 50
+      responses:
+        "201":
+          description: Withdrawal reserved (PENDING payout created)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payout"
+        "400":
+          description: Non-positive amount, or amount exceeds the available balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/UserNotFound"
+        "409":
+          description: A withdrawal is already PENDING for this user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: WITHDRAWAL_IN_PROGRESS
+                  message: "withdrawal '...' is still pending; wait for it to resolve first"
+        "429":
+          description: Another successful withdrawal happened within the last 24 hours
+          headers:
+            Retry-After:
+              description: Seconds until the next withdrawal is allowed
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: WITHDRAWAL_LIMIT
+                  message: only one successful withdrawal is allowed every 24 hours
+                  details:
+                    retryAfterSeconds: 86340
+
+  /api/payouts/{payoutId}/resolve:
+    post:
+      tags: [Payouts]
+      summary: Resolve an in-flight withdrawal
+      description: >
+        Simulates the payment processor's webhook (Question 2). `completed`
+        starts the 24h lock. `failed` / `cancelled` / `rejected` credit the
+        reserved amount back and leave the 24h lock untouched, so the user
+        can retry immediately. Only PENDING withdrawals can be resolved.
+      parameters:
+        - $ref: "#/components/parameters/PayoutId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [completed, failed, cancelled, rejected]
+              example:
+                status: completed
+      responses:
+        "200":
+          description: Payout resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payout"
+        "400":
+          description: The payout is not a WITHDRAWAL (e.g. an ADVANCE payout was given)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No payout with that id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Payout is not PENDING — already resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: ALREADY_RESOLVED
+                  message: "payout '...' is already COMPLETED"
+
+  /api/users/{username}/ledger:
+    get:
+      tags: [Users]
+      summary: Full audit trail
+      description: >
+        Every balance-changing event for the user, in order, with a running
+        balance. `withdrawableBalance` on the user always equals the sum of
+        these entries' `amount`.
+      parameters:
+        - $ref: "#/components/parameters/Username"
+      responses:
+        "200":
+          description: Ledger entries, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerEntry"
+        "404":
+          $ref: "#/components/responses/UserNotFound"
+
+components:
+  parameters:
+    Username:
+      name: username
+      in: path
+      required: true
+      schema:
+        type: string
+      example: john_doe
+    SaleId:
+      name: saleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PayoutId:
+      name: payoutId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    UserNotFound:
+      description: No user with that username
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: USER_NOT_FOUND
+              message: "no user named '...'"
+
+  schemas:
+    CreateSaleRequest:
+      type: object
+      required: [userId, brand, earning]
+      properties:
+        userId:
+          type: string
+          description: Username — created if it doesn't already exist
+        brand:
+          type: string
+          description: Brand name — created if it doesn't already exist
+        earning:
+          oneOf:
+            - type: number
+            - type: string
+          description: Sale earning; must be positive. Decimal money, so a string is also accepted.
+
+    Sale:
+      type: object
+      description: >
+        Money fields (earning, advancePaid) are Prisma Decimal values
+        serialized as their plain string form (e.g. "40", not "40.00").
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        brandId:
+          type: string
+          format: uuid
+        earning:
+          type: string
+          example: "40"
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+        advancePaid:
+          type: string
+          example: "4"
+        advancePaidAt:
+          type: [string, "null"]
+          format: date-time
+        reconciledAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Payout:
+      type: object
+      description: Money fields serialize the same way as Sale (plain decimal string, e.g. "50").
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        saleId:
+          type: [string, "null"]
+          format: uuid
+        type:
+          type: string
+          enum: [ADVANCE, FINAL_ADJUSTMENT, WITHDRAWAL]
+        amount:
+          type: string
+          description: Negative for clawbacks and reservations.
+          example: "50"
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED, CANCELLED, REJECTED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LedgerEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        saleId:
+          type: [string, "null"]
+          format: uuid
+        payoutId:
+          type: [string, "null"]
+          format: uuid
+        amount:
+          type: string
+          description: Signed delta applied to the balance.
+          example: "-50"
+        reason:
+          type: string
+          enum: [ADVANCE_PAYOUT, FINAL_ADJUSTMENT, WITHDRAWAL_RESERVED, WITHDRAWAL_REVERSED]
+        balanceAfter:
+          type: string
+          example: "30"
+        createdAt:
+          type: string
+          format: date-time
+
+    Balance:
+      type: object
+      properties:
+        username:
+          type: string
+        withdrawableBalance:
+          type: string
+          description: Fixed 2-decimal-place string (unlike the raw entity fields above).
+          example: "80.00"
+        lastSuccessfulWithdrawalAt:
+          type: [string, "null"]
+          format: date-time
+
+    AdvancePayoutResult:
+      type: object
+      properties:
+        salesProcessed:
+          type: integer
+          example: 3
+        totalAdvancePaid:
+          type: string
+          description: Fixed 2-decimal-place string.
+          example: "12.00"
+
+    ReconcileResult:
+      type: object
+      properties:
+        sale:
+          $ref: "#/components/schemas/Sale"
+        adjustment:
+          type: string
+          description: Fixed 2-decimal-place string; negative for a rejection clawback.
+          example: "36.00"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: USER_NOT_FOUND
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true

@@ -14,7 +14,8 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/express": "^5.0.6"
+    "@types/express": "^5.0.6",
+    "@types/swagger-ui-express": "^4.1.8"
   },
   "peerDependencies": {
     "typescript": "^5"
@@ -25,6 +26,8 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "prisma": "^7.8.0",
+    "swagger-ui-express": "^5.0.1",
+    "yaml": "^2.9.0",
     "zod": "^4.4.3"
   }
 }

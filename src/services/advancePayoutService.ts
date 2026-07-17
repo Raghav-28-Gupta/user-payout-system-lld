@@ -1,4 +1,4 @@
-import { prisma } from "../db";
+import { prisma, TX_OPTIONS } from "../db";
 import { Decimal, advanceOn } from "../money";
 import { applyLedgerEntry } from "./ledgerService";
 import { requireUser } from "./userService";
@@ -72,5 +72,5 @@ async function payAdvanceForSale(saleId: string): Promise<Decimal | null> {
     });
 
     return advance;
-  });
+  }, TX_OPTIONS);
 }

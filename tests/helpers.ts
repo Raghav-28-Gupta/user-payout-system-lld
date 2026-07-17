@@ -1,11 +1,8 @@
-import { expect, setDefaultTimeout } from "bun:test";
+import { expect } from "bun:test";
 import { prisma } from "../src/db";
 import { resetAndSeed } from "../prisma/seed";
 import { Decimal } from "../src/money";
 import { AppError } from "../src/errors";
-
-// Tests run against a real hosted Postgres — allow for network latency.
-setDefaultTimeout(30_000);
 
 export { prisma };
 

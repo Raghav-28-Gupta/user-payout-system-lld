@@ -1,3 +1,8 @@
+import { setDefaultTimeout } from "bun:test";
+
+// Hosted Postgres latency: raise the per-test timeout for this file.
+setDefaultTimeout(30_000);
+
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";

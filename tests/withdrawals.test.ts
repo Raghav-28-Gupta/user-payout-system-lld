@@ -1,3 +1,8 @@
+import { setDefaultTimeout } from "bun:test";
+
+// Hosted Postgres latency: raise the per-test timeout for this file.
+setDefaultTimeout(30_000);
+
 import { describe, expect, test } from "bun:test";
 import { Decimal } from "../src/money";
 import { expectAppError, ledgerAudit, prisma, resetDb } from "./helpers";
